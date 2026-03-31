@@ -1,0 +1,5 @@
+{
+  "name": "SKYNETchat Spy Detector",
+  "description": "Advanced spy camera and electronic device detection tool. Features EMF analysis, Wi-Fi network scanning, and Bluetooth device discovery to help secure your privacy.",
+  "requestFramePermissions": ["camera", "geolocation"]
+}
