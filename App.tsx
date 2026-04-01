@@ -9,6 +9,7 @@ import HistoryLog from './components/HistoryLog';
 import Dashboard from './components/Dashboard';
 import WiFiAnalyzer from './components/WiFiAnalyzer';
 import BluetoothSniffer from './components/BluetoothSniffer';
+import SensorManager from './components/SensorManager';
 import { AppView, PowerUserSettings as PowerUserSettingsType, DetectionResult } from './types';
 import { INITIAL_POWER_USER_SETTINGS } from './constants';
 
@@ -51,6 +52,8 @@ const App: React.FC = () => {
         return <WiFiAnalyzer />;
       case AppView.BluetoothSniffer:
         return <BluetoothSniffer />;
+      case AppView.SensorManager:
+        return <SensorManager />;
       case AppView.BlueScan:
         return (
           <ModeDisplay 

@@ -18,6 +18,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
     { id: AppView.HistoryLog, name: 'Histórico de Detecções', icon: '📜' },
     { id: AppView.WiFiAnalyzer, name: 'Wi-Fi Analyzer', icon: '📶' },
     { id: AppView.BluetoothSniffer, name: 'Bluetooth Sniffer', icon: '📱' },
+    { id: AppView.SensorManager, name: 'Sensor Management', icon: '🛠️' },
   ];
 
   const handleSelect = (view: AppView) => {

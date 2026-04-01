@@ -3,14 +3,29 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 interface CameraFeedProps {
   isActive: boolean;
   onStreamReady?: (stream: MediaStream) => void;
+  signalIntensity?: number;
 }
 
-const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady }) => {
+const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady, signalIntensity = 0 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [gridData, setGridData] = useState<number[]>(new Array(64).fill(0));
+
+  // Update grid data based on signal intensity
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setGridData(prev => prev.map(() => {
+        // Base intensity from signal + some random noise
+        const base = Math.min(1, signalIntensity / 100);
+        const noise = Math.random() * 0.3;
+        return Math.max(0, Math.min(1, base + noise - 0.15));
+      }));
+    }, 150);
+    return () => clearInterval(interval);
+  }, [signalIntensity]);
 
   const getDevices = useCallback(async () => {
     try {
@@ -25,70 +40,91 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady }) => {
     }
   }, [selectedDeviceId]);
 
-  const startCamera = useCallback(async () => {
-    if (!isActive) return;
+  const [retryCount, setRetryCount] = useState(0);
 
-    // Stop existing stream
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
+  // Consolidate camera initialization
+  useEffect(() => {
+    let activeStream: MediaStream | null = null;
+    let isMounted = true;
 
-    setError(null);
+    const initCamera = async () => {
+      if (!isActive) return;
 
-    try {
-      let constraints: MediaStreamConstraints = {
-        video: selectedDeviceId ? { deviceId: selectedDeviceId } : { facingMode: 'environment' },
-      };
-      
-      let newStream: MediaStream;
       try {
-        newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (innerErr) {
-        console.warn('Failed with preferred constraints, trying fallback:', innerErr);
-        // Fallback to any video device
-        newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const constraints: MediaStreamConstraints = {
+          video: selectedDeviceId ? { deviceId: selectedDeviceId } : { facingMode: 'environment' },
+        };
+        
+        activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        if (isMounted) {
+          setStream(activeStream);
+          setError(null);
+          if (onStreamReady) onStreamReady(activeStream);
+          
+          if (videoRef.current) {
+            videoRef.current.srcObject = activeStream;
+            // Handle play promise to avoid unhandled rejections or abort errors
+            const playPromise = videoRef.current.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(e => {
+                if (e.name !== 'AbortError') {
+                  console.error("Error playing video:", e);
+                }
+              });
+            }
+          }
+        } else {
+          activeStream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err: any) {
+        if (!isMounted) return;
+        console.error('Error accessing camera:', err);
+        
+        // Try fallback if specific device fails
+        if (selectedDeviceId) {
+          try {
+            activeStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            if (isMounted) {
+              setStream(activeStream);
+              setError(null);
+              if (videoRef.current) {
+                videoRef.current.srcObject = activeStream;
+                videoRef.current.play().catch(() => {});
+              }
+            } else {
+              activeStream.getTracks().forEach(track => track.stop());
+            }
+            return;
+          } catch (fallbackErr) {
+            console.error('Fallback camera failed:', fallbackErr);
+          }
+        }
+
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          setError('Permissão de câmera negada. Por favor, autorize o acesso.');
+        } else {
+          setError('Erro ao acessar a câmera. Verifique as conexões.');
+        }
       }
-      
-      setStream(newStream);
+    };
+
+    initCamera();
+
+    return () => {
+      isMounted = false;
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+      }
       if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
+        videoRef.current.srcObject = null;
       }
-      if (onStreamReady) {
-        onStreamReady(newStream);
-      }
-      // Refresh devices list after permission is granted to get labels
-      getDevices();
-    } catch (err: any) {
-      console.error('Error accessing camera:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Permissão de câmera negada. Por favor, autorize o acesso nas configurações do navegador.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        setError('Nenhuma câmera encontrada no dispositivo.');
-      } else {
-        setError('Erro ao acessar a câmera. Tente novamente.');
-      }
-    }
-  }, [isActive, selectedDeviceId, onStreamReady, stream, getDevices]);
+    };
+  }, [isActive, selectedDeviceId, onStreamReady, retryCount]);
 
   useEffect(() => {
     getDevices();
   }, [getDevices]);
-
-  useEffect(() => {
-    if (isActive) {
-      startCamera();
-    } else {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        setStream(null);
-      }
-    }
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [isActive, selectedDeviceId]);
 
   if (!isActive) return null;
 
@@ -98,7 +134,7 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady }) => {
         <div className="p-6 text-center bg-gray-900 border border-red-500/50 rounded-xl max-w-xs mx-auto">
           <p className="text-red-400 text-sm mb-4">{error}</p>
           <button 
-            onClick={startCamera}
+            onClick={() => setRetryCount(prev => prev + 1)}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors"
           >
             Tentar Novamente
@@ -108,11 +144,40 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady }) => {
         <>
           <video
             ref={videoRef}
-            autoPlay
             playsInline
             muted
             className="w-full h-full object-cover"
           />
+          
+          {/* Detection Grid Overlay */}
+          <div className="absolute inset-0 grid grid-cols-8 grid-rows-8 pointer-events-none opacity-40">
+            {gridData.map((intensity, i) => (
+              <div 
+                key={i}
+                className="border-[0.5px] border-blue-500/10 transition-all duration-300 flex items-center justify-center"
+                style={{ 
+                  backgroundColor: intensity > 0.6 ? `rgba(59, 130, 246, ${intensity * 0.3})` : 'transparent',
+                  borderColor: intensity > 0.8 ? `rgba(59, 130, 246, 0.4)` : `rgba(59, 130, 246, 0.1)`
+                }}
+              >
+                {intensity > 0.85 && (
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-ping"></div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* HUD Elements */}
+          <div className="absolute top-4 left-4 flex flex-col gap-1 pointer-events-none">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <span className="text-[10px] text-red-500 font-mono font-bold uppercase tracking-widest">Signal Tracking</span>
+            </div>
+            <div className="text-[8px] text-blue-400 font-mono uppercase">
+              Sensitivity: {(signalIntensity).toFixed(1)}%
+            </div>
+          </div>
+
           <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-black bg-opacity-50 p-2 rounded-md">
             <select
               value={selectedDeviceId}

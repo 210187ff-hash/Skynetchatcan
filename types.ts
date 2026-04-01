@@ -7,6 +7,7 @@ export enum AppView {
   HistoryLog = 'HistoryLog',
   WiFiAnalyzer = 'WiFiAnalyzer',
   BluetoothSniffer = 'BluetoothSniffer',
+  SensorManager = 'SensorManager',
 }
 
 export interface ModeDetails {

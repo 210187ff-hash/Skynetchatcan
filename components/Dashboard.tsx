@@ -13,6 +13,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectView }) => {
     { id: AppView.HistoryLog, name: 'Histórico', icon: '📜', color: 'bg-yellow-600' },
     { id: AppView.WiFiAnalyzer, name: 'Wi-Fi Analyzer', icon: '📶', color: 'bg-blue-500' },
     { id: AppView.BluetoothSniffer, name: 'BT Sniffer', icon: '📱', color: 'bg-indigo-600' },
+    { id: AppView.SensorManager, name: 'Sensores', icon: '🛠️', color: 'bg-purple-600' },
     { id: AppView.PowerUserSettings, name: 'Configurações', icon: '⚙️', color: 'bg-gray-600' },
   ];
 
@@ -85,6 +86,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectView }) => {
             <div className="text-left">
               <h4 className="text-lg font-bold text-gray-400">Configurações</h4>
               <p className="text-xs text-gray-400">Ajustar parâmetros do sistema</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onSelectView(AppView.SensorManager)}
+            className="flex items-center p-6 bg-purple-600/10 border border-purple-500/30 rounded-2xl hover:bg-purple-600/20 transition-all group"
+          >
+            <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center mr-4 group-hover:scale-110 transition-transform">
+              <span className="text-2xl">🛠️</span>
+            </div>
+            <div className="text-left">
+              <h4 className="text-lg font-bold text-purple-400">Gerenciar Sensores</h4>
+              <p className="text-xs text-gray-400">Status real de todo o hardware</p>
             </div>
           </button>
         </div>

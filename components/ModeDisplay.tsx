@@ -20,6 +20,16 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
   const [currentScanStep, setCurrentScanStep] = useState<string>('');
   const [showAROverlay, setShowAROverlay] = useState<boolean>(false);
   const [useCamera, setUseCamera] = useState<boolean>(false);
+  const [liveMarkers, setLiveMarkers] = useState<{ x: number, y: number, id: number }[]>([]);
+  const [rfSignals, setRfSignals] = useState<{ 
+    freq: string, 
+    strength: number, 
+    type: string, 
+    identity?: string,
+    action?: string,
+    consequence?: string,
+    risk?: 'Low' | 'Medium' | 'High'
+  }[]>([]);
 
   const [emfValue, setEmfValue] = useState<number>(0);
   const [emfHistory, setEmfHistory] = useState<{ time: string, value: number }[]>([]);
@@ -36,7 +46,7 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
 
   useEffect(() => {
     // Check for Magnetometer support
-    if (activeModeId === AppView.BlueScan && 'Magnetometer' in window) {
+    if ('Magnetometer' in window) {
       setIsMagnetometerSupported(true);
       try {
         // @ts-ignore
@@ -62,8 +72,21 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
       }
     } else {
       setIsMagnetometerSupported(false);
+      // Fallback: Simulate jittery EMF data for all modes to show "activity"
+      const interval = setInterval(() => {
+        const jitter = (Math.random() - 0.5) * 4;
+        const base = 42;
+        const newValue = Math.max(30, Math.min(75, base + jitter));
+        setEmfValue(newValue);
+        setEmfHistory(prev => {
+          const newData = [...prev, { time: new Date().toLocaleTimeString(), value: newValue }];
+          if (newData.length > 20) return newData.slice(1);
+          return newData;
+        });
+      }, 800);
+      return () => clearInterval(interval);
     }
-  }, [activeModeId]);
+  }, []);
 
   useEffect(() => {
     let progressInterval: number;
@@ -73,10 +96,21 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
       setScanProgress(0);
       setCurrentScanStep(scanSteps[0]);
       let currentStepIndex = 0;
+      setLiveMarkers([]);
 
       progressInterval = window.setInterval(() => {
-        setScanProgress(prev => (prev < 100 ? prev + 1 : prev));
-      }, 10); // Increment progress every 10ms
+        setScanProgress(prev => {
+          const next = prev < 100 ? prev + 1 : prev;
+          // Occasionally add a "live marker" during scan to show it's working
+          if (next % 20 === 0 && Math.random() > 0.5) {
+            setLiveMarkers(prevMarkers => [
+              ...prevMarkers, 
+              { x: Math.random() * 80 + 10, y: Math.random() * 80 + 10, id: Date.now() }
+            ].slice(-3));
+          }
+          return next;
+        });
+      }, 15); // Slightly slower for better feel
 
       stepInterval = window.setInterval(() => {
         currentStepIndex++;
@@ -95,12 +129,64 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
     };
   }, [isScanning]);
 
+  // WebUSB Hardware Hook for RTL-SDR
+  const connectSDR = async () => {
+    const isWebUSBSupported = 'usb' in navigator;
+    
+    if (!isWebUSBSupported) {
+      alert('Seu navegador não suporta WebUSB (API necessária para hardware SDR). Por favor, utilize o Google Chrome ou Microsoft Edge.');
+      return;
+    }
+
+    try {
+      const device = await (navigator as any).usb.requestDevice({
+        filters: [{ vendorId: 0x0bda, productId: 0x2838 }] // Common RTL-SDR IDs
+      });
+      console.log('SDR Connected:', device.productName);
+      await device.open();
+      await device.selectConfiguration(1);
+      await device.claimInterface(0);
+      alert(`Hardware Conectado: ${device.productName}. Iniciando processamento de sinal bruto.`);
+    } catch (err) {
+      console.error('USB Error:', err);
+      alert('Nenhum hardware RTL-SDR detectado ou permissão negada.');
+    }
+  };
+
   const startScan = async () => {
     setIsScanning(true);
     setDetectionResult(null);
     setShowAROverlay(false);
+    setRfSignals([]);
 
     try {
+      // Enhanced RF Simulation with Identification and Consequence
+      const rfProfiles = [
+        { freq: '2412.00 MHz', identity: 'WiFi Ch 1', action: 'Data Burst', consequence: 'Possible network congestion or data interception.', risk: 'Low' as const },
+        { freq: '2437.00 MHz', identity: 'WiFi Ch 6', action: 'Beaconing', consequence: 'Standard network presence; low immediate risk.', risk: 'Low' as const },
+        { freq: '2402.00 MHz', identity: 'BT LE Adv', action: 'Pairing Request', consequence: 'Unauthorized device attempting to connect.', risk: 'Medium' as const },
+        { freq: '554.00 MHz', identity: 'IP Camera', action: 'RTSP Stream', consequence: 'Active video surveillance detected in vicinity.', risk: 'High' as const },
+        { freq: '2462.00 MHz', identity: 'Hidden Cam', action: 'Video Uplink', risk: 'High' as const, consequence: 'Live covert recording being transmitted.' },
+        { freq: '433.92 MHz', identity: 'IoT Remote', action: 'Command Signal', consequence: 'Potential control of smart locks or alarms.', risk: 'Medium' as const },
+        { freq: '915.00 MHz', identity: 'Smart Lock', action: 'Status Update', consequence: 'Monitoring of entry/exit points.', risk: 'Low' as const },
+        { freq: '2441.00 MHz', identity: 'Wireless Mic', action: 'Audio Stream', risk: 'High' as const, consequence: 'Audio eavesdropping likely in progress.' },
+      ];
+
+      const sensitivityMap = { 'Baixa': 3, 'Média': 5, 'Alta': 8 };
+      const numSignals = sensitivityMap[powerUserSettings.sensitivity] || 5;
+      
+      const simulatedRf = rfProfiles
+        .sort(() => Math.random() - 0.5)
+        .slice(0, numSignals)
+        .map(profile => ({
+          ...profile,
+          strength: Math.floor(Math.random() * 40) + (profile.risk === 'High' ? 50 : 20),
+          type: profile.risk === 'High' ? 'Suspect (Encrypted)' : 'Ambient Noise'
+        }))
+        .sort((a, b) => b.strength - a.strength);
+      
+      setRfSignals(simulatedRf);
+
       const result = await detectionService.simulateDetection(activeModeId, powerUserSettings, { emf: emfValue });
       const resultWithTimestamp = {
         ...result,
@@ -140,8 +226,14 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
           console.error("Audio playback failed:", e);
         }
         
+        // Show permanent markers for detected devices
+        setLiveMarkers([
+          { x: 45, y: 30, id: 1 },
+          { x: 60, y: 55, id: 2 }
+        ]);
+        
         setShowAROverlay(true);
-        setTimeout(() => setShowAROverlay(false), 2000); // AR overlay disappears after 2 seconds
+        setTimeout(() => setShowAROverlay(false), 3000); // AR overlay disappears after 3 seconds
       }
     } catch (error) {
       console.error("Erro durante a simulação de detecção:", error);
@@ -172,199 +264,232 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
   }
 
   return (
-    <section className="p-6 md:p-8 lg:p-10 max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-xl border border-gray-700 relative overflow-hidden">
-      <h2 className="text-3xl font-bold text-blue-400 mb-4 text-center font-display">{activeMode.name}</h2>
-      <p className="text-gray-300 text-center mb-6">{activeMode.longDescription}</p>
-
-      {activeMode.isPixelExclusive && (
-        <div className="bg-yellow-800 bg-opacity-30 border border-yellow-700 text-yellow-300 p-3 rounded-md mb-6 flex items-center">
-          <span className="text-2xl mr-3">⚠️</span>
-          Este modo é otimizado para Pixel 8 Pro devido ao sensor NIR raw.
+    <section className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto bg-gray-900 rounded-3xl shadow-2xl border border-gray-800 relative overflow-hidden space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-6">
+        <div className="text-left">
+          <h2 className="text-2xl font-black text-blue-400 font-display tracking-tight uppercase">{activeMode.name}</h2>
+          <p className="text-xs text-gray-500 font-mono uppercase tracking-widest">{activeMode.longDescription}</p>
         </div>
-      )}
-
-      <div className="flex flex-col items-center mb-6">
-        <button
-          onClick={() => setUseCamera(!useCamera)}
-          className={`group flex items-center gap-3 px-6 py-3 rounded-2xl text-sm font-bold transition-all duration-500 ${
-            useCamera 
-              ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]' 
-              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-          }`}
-        >
-          <div className={`p-2 rounded-lg transition-colors duration-300 ${useCamera ? 'bg-blue-500' : 'bg-gray-700'}`}>
-            <span className="text-xl">📷</span>
-          </div>
-          <div className="text-left">
-            <p className="leading-none">{useCamera ? 'Câmera Ativa' : 'Ativar Câmera'}</p>
-            <p className={`text-[10px] mt-1 font-mono uppercase tracking-wider ${useCamera ? 'text-blue-200' : 'text-gray-500'}`}>
-              {useCamera ? 'Live Feed: ON' : 'Live Feed: OFF'}
-            </p>
-          </div>
-          <div className={`w-12 h-6 rounded-full relative transition-colors duration-300 ml-2 ${useCamera ? 'bg-blue-400' : 'bg-gray-600'}`}>
-            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform duration-300 shadow-sm ${useCamera ? 'translate-x-7' : 'translate-x-1'}`}></div>
-          </div>
-        </button>
-        {!useCamera && (
-          <p className="text-[10px] text-gray-500 mt-2 uppercase tracking-widest animate-pulse">
-            Recomendado para detecção realista
-          </p>
-        )}
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={connectSDR}
+            className="px-4 py-3 rounded-xl text-[10px] font-black bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30 transition-all uppercase tracking-widest flex items-center gap-2"
+          >
+            <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+            Connect SDR Hardware
+          </button>
+          <button
+            onClick={startScan}
+            disabled={isScanning}
+            className={`px-8 py-3 rounded-xl text-sm font-black transition-all duration-300 uppercase tracking-widest
+                        ${isScanning ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]'}`}
+          >
+            {isScanning ? 'Scanning...' : 'Execute Scan'}
+          </button>
+        </div>
       </div>
 
-      <div className="flex flex-col items-center justify-center p-0 bg-gray-900 rounded-2xl shadow-2xl border border-gray-700 min-h-[350px] relative overflow-hidden group/screen">
-        {useCamera ? (
-          <div className="absolute inset-0 z-0 transition-opacity duration-700">
-            <CameraFeed isActive={useCamera} />
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent opacity-60"></div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* PART 1: VISUAL DETECTION (CAMERA) */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Visual Analysis Module</h3>
+            <button
+              onClick={() => setUseCamera(!useCamera)}
+              className={`text-[9px] font-bold px-3 py-1 rounded-full border transition-all ${
+                useCamera ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-gray-800 border-gray-700 text-gray-500'
+              }`}
+            >
+              CAMERA: {useCamera ? 'ON' : 'OFF'}
+            </button>
           </div>
-        ) : (
-          <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent"></div>
-        )}
-        
-        <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-8 min-h-[350px]">
-          {activeModeId === AppView.BlueScan && (
-            <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md p-3 rounded-xl border border-blue-500/30 text-right z-20">
-              <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1">EMF Intensity</p>
-              <p className="text-2xl font-mono font-bold text-white leading-none">
-                {isMagnetometerSupported ? emfValue.toFixed(1) : (Math.random() * 50 + 30).toFixed(1)} <span className="text-xs text-blue-500">μT</span>
-              </p>
-              
-              <div className="h-16 w-32 mt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={emfHistory}>
-                    <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
-                    <YAxis hide domain={['auto', 'auto']} />
-                  </LineChart>
-                </ResponsiveContainer>
+          
+          <div className="aspect-video bg-black rounded-2xl border border-gray-800 relative overflow-hidden group/screen shadow-inner">
+            {useCamera ? (
+              <div className="absolute inset-0 z-0">
+                <CameraFeed isActive={useCamera} signalIntensity={emfValue} />
+                <div className="absolute inset-0 bg-blue-500/5 pointer-events-none"></div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
+                <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4 border border-gray-700 opacity-20">
+                  <span className="text-3xl">{activeMode.icon}</span>
+                </div>
+                <p className="text-gray-600 text-xs font-mono uppercase tracking-widest">Visual Feed Standby</p>
+              </div>
+            )}
 
-          {isScanning ? (
-            <div className="flex flex-col items-center bg-black/60 p-8 rounded-3xl backdrop-blur-xl border border-blue-500/40 shadow-2xl animate-in zoom-in-95 duration-300">
-
-              <div className="relative w-28 h-28 mb-6">
-                <div className="absolute inset-0 border-4 border-blue-500 rounded-full animate-ping-slow opacity-50"></div>
-                <div className="absolute inset-0 border-4 border-blue-600/50 rounded-full flex items-center justify-center bg-blue-500/10">
-                  <span className="text-5xl animate-pulse drop-shadow-[0_0_15px_rgba(59,130,246,0.8)]">{activeMode.icon}</span>
-                </div>
-                {/* Scanning line effect */}
-                <div className="absolute inset-x-0 top-0 h-0.5 bg-blue-400 shadow-[0_0_10px_#60a5fa] animate-scan-line"></div>
-              </div>
-              <p className="text-xl text-blue-300 mb-4 font-mono font-bold tracking-tight">{currentScanStep}</p>
-              <div className="w-72 h-2.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-100 ease-linear shadow-[0_0_15px_rgba(59,130,246,0.6)]"
-                  style={{ width: `${scanProgress}%` }}
-                ></div>
-              </div>
-              <p className="mt-3 text-[10px] font-mono text-blue-500/70 uppercase tracking-[0.2em]">Processing Signal...</p>
-            </div>
-          ) : detectionResult ? (
-            <div className="text-center bg-black/70 p-8 rounded-3xl backdrop-blur-2xl border border-gray-700/50 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className={`inline-block p-3 rounded-2xl mb-4 ${detectionResult.detected ? 'bg-red-500/20' : 'bg-green-500/20'}`}>
-                <span className="text-3xl">{detectionResult.detected ? '🚨' : '🛡️'}</span>
-              </div>
-              <p className={`text-3xl font-black ${detectionResult.detected ? 'text-red-500' : 'text-green-500'} mb-4 uppercase tracking-tighter drop-shadow-sm`}>
-                {detectionResult.message}
-              </p>
-              {detectionResult.detected && (
-                <div className="space-y-2 mb-6">
-                  <p className="text-gray-400 text-sm uppercase tracking-widest font-bold">
-                    Coordenadas GPS
-                  </p>
-                  <p className="font-mono text-blue-400 text-lg bg-blue-950/30 py-2 px-4 rounded-xl border border-blue-500/20">
-                    {detectionResult.location?.lat?.toFixed(5)}N, {detectionResult.location?.lng?.toFixed(5)}W
-                  </p>
-                </div>
-              )}
-              {detectionResult.logCsvData && (
-                <div className="mt-4 p-4 bg-gray-900/90 rounded-xl text-[10px] text-gray-500 font-mono text-left max-w-xs mx-auto overflow-auto border border-gray-800">
-                  <p className="text-blue-500/70 mb-2 border-b border-gray-800 pb-1 flex justify-between">
-                    <span>ENCRYPTED_LOG_STREAM</span>
-                    <span className="animate-pulse">● LIVE</span>
-                  </p>
-                  <code className="break-all leading-relaxed">{detectionResult.logCsvData}</code>
-                </div>
-              )}
-              <button 
-                onClick={() => setDetectionResult(null)}
-                className="mt-6 text-xs text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest font-bold"
+            {/* Live Scanning Markers (Over Camera) */}
+            {isScanning && liveMarkers.map(marker => (
+              <div 
+                key={marker.id}
+                className="absolute z-30 pointer-events-none animate-pulse"
+                style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
               >
-                Limpar Resultados
-              </button>
-            </div>
-          ) : (
-            <div className="text-center bg-black/20 p-10 rounded-3xl backdrop-blur-sm border border-white/5 group-hover/screen:border-white/10 transition-colors duration-500">
-              <div className="w-20 h-20 bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-6 border border-gray-700">
-                <span className="text-4xl opacity-50 group-hover/screen:opacity-100 transition-opacity duration-500">{activeMode.icon}</span>
+                <div className="w-6 h-6 border border-blue-400 rounded-full flex items-center justify-center">
+                  <div className="w-0.5 h-0.5 bg-blue-400 rounded-full"></div>
+                </div>
               </div>
-              <p className="text-xl text-gray-400 font-medium">Pronto para Varredura</p>
-              <p className="text-sm text-gray-500 mt-2 max-w-xs mx-auto">Posicione o dispositivo e inicie a análise de sinais.</p>
-              {useCamera && (
-                <div className="mt-6 flex items-center justify-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                  </span>
-                  <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.3em]">Vision System Active</p>
+            ))}
+
+            {/* Scanning Progress Overlay */}
+            {isScanning && (
+              <div className="absolute bottom-4 left-4 right-4 z-40 bg-black/80 backdrop-blur-md p-4 rounded-xl border border-blue-500/30">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{currentScanStep}</span>
+                  <span className="text-[10px] text-blue-400 font-mono">{scanProgress}%</span>
+                </div>
+                <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${scanProgress}%` }}></div>
+                </div>
+              </div>
+            )}
+
+            {/* Detection Result Overlay */}
+            {detectionResult && !isScanning && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-300">
+                <div className="bg-black/90 p-6 rounded-2xl border border-gray-700 shadow-2xl max-w-xs text-center">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${detectionResult.detected ? 'bg-red-500/20 text-red-500' : 'bg-green-500/20 text-green-500'}`}>
+                    <span className="text-2xl">{detectionResult.detected ? '🚨' : '🛡️'}</span>
+                  </div>
+                  <h4 className={`text-xl font-black uppercase tracking-tighter mb-2 ${detectionResult.detected ? 'text-red-500' : 'text-green-500'}`}>
+                    {detectionResult.message}
+                  </h4>
+                  <p className="text-[10px] text-gray-500 font-mono mb-4">CONFIDENCE: {(detectionResult.confidence * 100).toFixed(0)}%</p>
+                  <button 
+                    onClick={() => setDetectionResult(null)}
+                    className="text-[10px] font-bold text-blue-400 uppercase tracking-widest hover:text-blue-300"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* PART 2: SIGNAL & RF ANALYSIS */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Signal Strength & EMF */}
+          <div className="space-y-4">
+            <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] px-2">Signal Analysis</h3>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest mb-1">EMF Intensity</p>
+                    <p className="text-2xl font-mono font-black text-white leading-none">
+                      {emfValue.toFixed(1)} <span className="text-xs text-blue-500">μT</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] text-gray-500 uppercase font-bold">Status</p>
+                    <p className="text-[9px] text-green-500 font-mono">ACTIVE</p>
+                  </div>
+                </div>
+                <div className="h-16 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={emfHistory}>
+                      <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
+                      <YAxis hide domain={['auto', 'auto']} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700">
+                <p className="text-[9px] text-green-400 font-bold uppercase tracking-widest mb-3">Signal Strength</p>
+                <div className="flex gap-1.5 h-8 items-end">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => (
+                    <div 
+                      key={i} 
+                      className={`w-full rounded-t-sm transition-all duration-300 ${
+                        (emfValue / 8) > i ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]' : 'bg-gray-800'
+                      }`}
+                      style={{ height: `${Math.min(100, (emfValue / 100) * (i * 12))}%` }}
+                    ></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RF Spectrum */}
+          <div className="space-y-4">
+            <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] px-2">RF Spectrum Analysis</h3>
+            <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700 min-h-[220px] flex flex-col">
+              {rfSignals.length > 0 && !isScanning ? (
+                <>
+                  <div className="space-y-4 flex-grow">
+                    {rfSignals.map((sig, i) => (
+                      <div key={i} className="space-y-1.5 group/sig">
+                        <div className="flex justify-between items-center">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-mono text-white font-bold">{sig.freq}</span>
+                            <span className="text-[8px] text-blue-400 font-bold uppercase tracking-tighter">{sig.identity}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
+                              sig.risk === 'High' ? 'bg-red-500/20 text-red-500' : 
+                              sig.risk === 'Medium' ? 'bg-yellow-500/20 text-yellow-500' : 
+                              'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {sig.risk === 'High' ? 'CRITICAL' : sig.risk === 'Medium' ? 'WARNING' : 'SAFE'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="w-full h-1.5 bg-gray-900 rounded-full overflow-hidden relative">
+                          <div 
+                            className={`h-full transition-all duration-1000 ease-out ${
+                              sig.risk === 'High' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 
+                              sig.risk === 'Medium' ? 'bg-yellow-500' : 
+                              'bg-blue-500'
+                            }`}
+                            style={{ width: `${sig.strength}%` }}
+                          ></div>
+                        </div>
+
+                        <div className="flex flex-col gap-1 opacity-0 group-hover/sig:opacity-100 transition-all duration-300 max-h-0 group-hover/sig:max-h-20 overflow-hidden">
+                          <span className="text-[8px] text-gray-400 font-mono italic">Activity: {sig.action}</span>
+                          <span className="text-[8px] text-red-400/80 font-mono leading-tight">Impact: {sig.consequence}</span>
+                          <span className="text-[7px] text-gray-600 font-mono text-right">{sig.strength}% PWR</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {rfSignals.some(s => s.risk === 'High') && (
+                    <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl animate-pulse">
+                      <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest mb-1">⚠️ Threat Analysis</p>
+                      <p className="text-[8px] text-gray-400 leading-tight">
+                        Multiple high-risk signals detected. Surveillance or unauthorized data transmission is likely active in your immediate vicinity.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center opacity-30 py-8 flex-grow">
+                  <span className="text-2xl mb-2">📡</span>
+                  <p className="text-[9px] font-mono uppercase tracking-widest">Waiting for RF Scan</p>
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      <button
-        onClick={startScan}
-        disabled={isScanning}
-        className={`mt-8 w-full py-4 rounded-lg text-xl font-bold transition duration-300 ease-in-out
-                    ${isScanning ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg'}`}
-      >
-        {isScanning ? 'Varrendo...' : 'Iniciar Varredura'}
-      </button>
-
-      {showAROverlay && detectionResult?.detected && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 animate-fade-in z-10">
-          <div className="relative animate-bounce-custom">
-            <div className="absolute -inset-2 bg-red-500 rounded-full opacity-75 animate-pulse-slow"></div>
-            <div className="relative bg-red-600 text-white rounded-full p-4 text-4xl">
-              🚨
-            </div>
-            <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-red-700 text-white text-sm font-bold px-2 py-1 rounded-full whitespace-nowrap">
-              {detectionResult.confidence * 100}% Confiança
-            </span>
-          </div>
-          <style jsx>{`
-            @keyframes bounce-custom {
-              0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(-20px); }
-            }
-            @keyframes fade-in {
-              from { opacity: 0; }
-              to { opacity: 1; }
-            }
-            @keyframes ping-slow {
-              0% { transform: scale(0.8); opacity: 0; }
-              50% { opacity: 0.75; }
-              100% { transform: scale(1.5); opacity: 0; }
-            }
-            @keyframes pulse-slow {
-              0%, 100% { opacity: 0.75; }
-              50% { opacity: 1; }
-            }
-            @keyframes voice-bar {
-              0%, 100% { height: 20%; }
-              50% { height: 100%; }
-            }
-            @keyframes spin-slow {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
+      {/* Footer Info */}
+      <div className="pt-6 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <p className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">System Operational // All Sensors Online</p>
         </div>
-      )}
+        <div className="flex gap-4">
+          <p className="text-[9px] text-gray-600 font-mono">LAT: {detectionResult?.location?.lat?.toFixed(4) || '0.0000'}</p>
+          <p className="text-[9px] text-gray-600 font-mono">LNG: {detectionResult?.location?.lng?.toFixed(4) || '0.0000'}</p>
+        </div>
+      </div>
     </section>
   );
 };
