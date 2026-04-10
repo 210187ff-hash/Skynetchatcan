@@ -55,7 +55,17 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady, signal
           video: selectedDeviceId ? { deviceId: selectedDeviceId } : { facingMode: 'environment' },
         };
         
-        activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+        try {
+          activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (initialErr: any) {
+          // If environment camera fails or is blocked, try any video device
+          if (!selectedDeviceId) {
+            console.warn('Initial camera request failed, trying fallback:', initialErr);
+            activeStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          } else {
+            throw initialErr;
+          }
+        }
         
         if (isMounted) {
           setStream(activeStream);
@@ -81,30 +91,12 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ isActive, onStreamReady, signal
         if (!isMounted) return;
         console.error('Error accessing camera:', err);
         
-        // Try fallback if specific device fails
-        if (selectedDeviceId) {
-          try {
-            activeStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            if (isMounted) {
-              setStream(activeStream);
-              setError(null);
-              if (videoRef.current) {
-                videoRef.current.srcObject = activeStream;
-                videoRef.current.play().catch(() => {});
-              }
-            } else {
-              activeStream.getTracks().forEach(track => track.stop());
-            }
-            return;
-          } catch (fallbackErr) {
-            console.error('Fallback camera failed:', fallbackErr);
-          }
-        }
-
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setError('Permissão de câmera negada. Por favor, autorize o acesso.');
+          setError('Acesso à câmera bloqueado pelo navegador ou sistema. Verifique as permissões de privacidade ou tente abrir o app em uma nova aba.');
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          setError('Nenhuma câmera encontrada neste dispositivo.');
         } else {
-          setError('Erro ao acessar a câmera. Verifique as conexões.');
+          setError(`Erro ao acessar a câmera: ${err.message || 'Verifique as conexões.'}`);
         }
       }
     };

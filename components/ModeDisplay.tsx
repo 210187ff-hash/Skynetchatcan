@@ -222,6 +222,13 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
 
           oscillator.start();
           oscillator.stop(audioCtx.currentTime + 0.1);
+          
+          // Close context after beep finishes
+          setTimeout(() => {
+            if (audioCtx.state !== 'closed') {
+              audioCtx.close();
+            }
+          }, 200);
         } catch (e) {
           console.error("Audio playback failed:", e);
         }

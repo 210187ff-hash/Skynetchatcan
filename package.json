@@ -10,7 +10,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@tailwindcss/vite": "^4.2.2",
+    "exif-js": "^2.3.0",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",
     "react": "^19.2.0",

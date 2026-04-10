@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { nativeBridge, Platform } from '../services/nativeBridge';
+import { Smartphone, Globe, Bluetooth } from 'lucide-react';
 
 interface BTDevice {
   name: string;
@@ -49,6 +51,22 @@ const BluetoothSniffer: React.FC = () => {
 
   return (
     <div className="p-6 md:p-8 lg:p-10 max-w-4xl mx-auto bg-gray-800 rounded-2xl border border-gray-700 shadow-2xl space-y-8">
+      {/* Platform Status Badge */}
+      <div className="flex justify-end">
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${
+          nativeBridge.isNative() 
+            ? 'bg-green-600/10 border-green-500/50 text-green-400' 
+            : 'bg-blue-600/10 border-blue-500/50 text-blue-400'
+        }`}>
+          {nativeBridge.isNative() ? (
+            <Smartphone className="w-3 h-3" />
+          ) : (
+            <Globe className="w-3 h-3" />
+          )}
+          {nativeBridge.isNative() ? `NATIVE MODE: ${nativeBridge.getPlatform().toUpperCase()}` : 'WEB SIMULATION MODE'}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold text-blue-400 font-display">Bluetooth Sniffer (Real-Time)</h2>

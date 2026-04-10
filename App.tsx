@@ -10,6 +10,29 @@ import Dashboard from './components/Dashboard';
 import WiFiAnalyzer from './components/WiFiAnalyzer';
 import BluetoothSniffer from './components/BluetoothSniffer';
 import SensorManager from './components/SensorManager';
+import UltrasonicDetector from './components/UltrasonicDetector';
+import MagneticMapper from './components/MagneticMapper';
+import PrivacyAudit from './components/PrivacyAudit';
+import OpticalScanner from './components/OpticalScanner';
+import SigintWarRoom from './components/SigintWarRoom';
+import SteganoLab from './components/SteganoLab';
+import AcousticForensics from './components/AcousticForensics';
+import MetadataScrubber from './components/MetadataScrubber';
+import SubnetScanner from './components/SubnetScanner';
+import SignalInterference from './components/SignalInterference';
+import USBHardwareAudit from './components/USBHardwareAudit';
+import BatteryForensics from './components/BatteryForensics';
+import GeoIntegrity from './components/GeoIntegrity';
+import SeismicMonitor from './components/SeismicMonitor';
+import LightPulseDetector from './components/LightPulseDetector';
+import NetworkJitter from './components/NetworkJitter';
+import ClipboardSanitizer from './components/ClipboardSanitizer';
+import KeystrokeDynamics from './components/KeystrokeDynamics';
+import WebRTCLeakAudit from './components/WebRTCLeakAudit';
+import ScreenIntegrity from './components/ScreenIntegrity';
+import StoragePressure from './components/StoragePressure';
+import FontFingerprint from './components/FontFingerprint';
+import CanvasNoiseTest from './components/CanvasNoiseTest';
 import { AppView, PowerUserSettings as PowerUserSettingsType, DetectionResult } from './types';
 import { INITIAL_POWER_USER_SETTINGS } from './constants';
 
@@ -54,6 +77,52 @@ const App: React.FC = () => {
         return <BluetoothSniffer />;
       case AppView.SensorManager:
         return <SensorManager />;
+      case AppView.UltrasonicDetector:
+        return <UltrasonicDetector />;
+      case AppView.MagneticMapper:
+        return <MagneticMapper />;
+      case AppView.PrivacyAudit:
+        return <PrivacyAudit />;
+      case AppView.OpticalScanner:
+        return <OpticalScanner />;
+      case AppView.SigintWarRoom:
+        return <SigintWarRoom />;
+      case AppView.SteganoLab:
+        return <SteganoLab />;
+      case AppView.AcousticForensics:
+        return <AcousticForensics />;
+      case AppView.MetadataScrubber:
+        return <MetadataScrubber />;
+      case AppView.SubnetScanner:
+        return <SubnetScanner />;
+      case AppView.SignalInterference:
+        return <SignalInterference />;
+      case AppView.USBHardwareAudit:
+        return <USBHardwareAudit />;
+      case AppView.BatteryForensics:
+        return <BatteryForensics />;
+      case AppView.GeoIntegrity:
+        return <GeoIntegrity />;
+      case AppView.SeismicMonitor:
+        return <SeismicMonitor />;
+      case AppView.LightPulseDetector:
+        return <LightPulseDetector />;
+      case AppView.NetworkJitter:
+        return <NetworkJitter />;
+      case AppView.ClipboardSanitizer:
+        return <ClipboardSanitizer />;
+      case AppView.KeystrokeDynamics:
+        return <KeystrokeDynamics />;
+      case AppView.WebRTCLeakAudit:
+        return <WebRTCLeakAudit />;
+      case AppView.ScreenIntegrity:
+        return <ScreenIntegrity />;
+      case AppView.StoragePressure:
+        return <StoragePressure />;
+      case AppView.FontFingerprint:
+        return <FontFingerprint />;
+      case AppView.CanvasNoiseTest:
+        return <CanvasNoiseTest />;
       case AppView.BlueScan:
         return (
           <ModeDisplay 

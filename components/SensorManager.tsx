@@ -162,13 +162,22 @@ const SensorManager: React.FC = () => {
     if (id === 'gps') {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          updateSensor('gps', { value: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` });
-          addLog(`GPS: Localização obtida com sucesso.`);
+          updateSensor('gps', { 
+            status: 'active',
+            value: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
+            description: `Lat: ${pos.coords.latitude}, Lng: ${pos.coords.longitude}. Precisão: ${pos.coords.accuracy}m.`
+          });
+          addLog(`GPS: Localização obtida com sucesso. Precisão: ${pos.coords.accuracy}m`);
         },
         (err) => {
-          updateSensor('gps', { status: 'denied' });
-          addLog(`GPS Erro: ${err.message}`);
-        }
+          let msg = 'Erro desconhecido.';
+          if (err.code === 1) msg = 'Permissão negada.';
+          if (err.code === 2) msg = 'Sinal indisponível.';
+          if (err.code === 3) msg = 'Timeout.';
+          updateSensor('gps', { status: 'denied', value: 'Erro' });
+          addLog(`GPS Erro: ${msg}`);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
 
