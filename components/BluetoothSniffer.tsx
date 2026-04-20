@@ -11,6 +11,7 @@ interface BTDevice {
 const BluetoothSniffer: React.FC = () => {
   const [devices, setDevices] = useState<BTDevice[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [pairingDeviceId, setPairingDeviceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const requestBluetoothDevice = async () => {
@@ -46,6 +47,26 @@ const BluetoothSniffer: React.FC = () => {
       }
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handlePair = async (deviceId: string) => {
+    setPairingDeviceId(deviceId);
+    setError(null);
+    try {
+      const success = await nativeBridge.pairDevice(deviceId);
+      if (success) {
+        setDevices(prev => prev.map(d => 
+          d.id === deviceId ? { ...d, connected: true } : d
+        ));
+      } else {
+        setError('Falha ao parear com o dispositivo. Tente novamente.');
+      }
+    } catch (err) {
+      console.error("Pairing Error:", err);
+      setError('Ocorreu um erro inesperado durante o pareamento.');
+    } finally {
+      setPairingDeviceId(null);
     }
   };
 
@@ -106,10 +127,23 @@ const BluetoothSniffer: React.FC = () => {
                     <p className="text-xs text-gray-500 font-mono">ID: {dev.id}</p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end space-y-2">
                   <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${dev.connected ? 'bg-green-600/20 text-green-500' : 'bg-gray-700 text-gray-400'}`}>
                     {dev.connected ? 'Conectado' : 'Detectado'}
                   </span>
+                  {!dev.connected && (
+                    <button
+                      onClick={() => handlePair(dev.id)}
+                      disabled={pairingDeviceId !== null}
+                      className={`text-[10px] px-3 py-1 rounded-lg font-bold transition-all ${
+                        pairingDeviceId === dev.id 
+                          ? 'bg-blue-600/50 text-white animate-pulse cursor-wait' 
+                          : 'bg-blue-600 hover:bg-blue-500 text-white'
+                      }`}
+                    >
+                      {pairingDeviceId === dev.id ? 'Pareando...' : 'Parear'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

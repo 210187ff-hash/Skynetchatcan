@@ -1,0 +1,6 @@
+{
+  "appId": "com.skynetchat.spynet",
+  "appName": "SPYNET OS",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

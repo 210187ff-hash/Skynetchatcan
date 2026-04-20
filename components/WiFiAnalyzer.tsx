@@ -87,6 +87,8 @@ const WiFiAnalyzer: React.FC = () => {
   const [realLocation, setRealLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [selectedNetwork, setSelectedNetwork] = useState<WiFiNetwork | null>(null);
   const [connectedSSID, setConnectedSSID] = useState<string>('SKYNET_GUEST');
+  const [manualSubnet, setManualSubnet] = useState<string>('192.168.1');
+  const [showManualSubnet, setShowManualSubnet] = useState(false);
   const [rtspStream, setRtspStream] = useState<{ ip: string; active: boolean } | null>(null);
 
   // Helper to generate a realistic simulated MAC address
@@ -120,24 +122,6 @@ const WiFiAnalyzer: React.FC = () => {
     return ports;
   };
 
-  // Attempt to discover real local IP via WebRTC
-  const getLocalIP = (): Promise<string> => {
-    return new Promise((resolve) => {
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      pc.createDataChannel('');
-      pc.createOffer().then(pc.setLocalDescription.bind(pc));
-      pc.onicecandidate = (ice) => {
-        if (!ice || !ice.candidate || !ice.candidate.candidate) return;
-        const myIP = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/.exec(ice.candidate.candidate)?.[1];
-        if (myIP) {
-          pc.onicecandidate = null;
-          resolve(myIP);
-        }
-      };
-      setTimeout(() => resolve('127.0.0.1'), 1000);
-    });
-  };
-
   // Real Network Information API
   const updateConnectionInfo = async () => {
     const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
@@ -154,7 +138,7 @@ const WiFiAnalyzer: React.FC = () => {
 
     try {
       const [ipRes, localIP] = await Promise.all([
-        fetch('https://ipapi.co/json/').then(r => r.json()),
+        fetch('https://ipapi.co/json/').then(r => r.json()).catch(() => ({})),
         getLocalIP()
       ]);
 
@@ -167,12 +151,89 @@ const WiFiAnalyzer: React.FC = () => {
       });
 
       // Update self device in LAN if found
-      if (localIP !== '127.0.0.1') {
-        setLanDevices(prev => prev.map(d => d.ip === '192.168.1.22' ? { ...d, ip: localIP, vendor: 'Local Host (Real)' } : d));
+      if (localIP && localIP !== '127.0.0.1') {
+        const subnet = localIP.split('.').slice(0, 3).join('.');
+        setManualSubnet(subnet);
+        setLanDevices(prev => prev.map(d => d.ip === '192.168.1.105' ? { ...d, ip: localIP, vendor: 'Este Dispositivo (Você)' } : d));
+      } else {
+        setShowManualSubnet(true);
       }
     } catch (e) {
       setNetInfo(baseInfo);
+      setShowManualSubnet(true);
     }
+  };
+
+  const startScan = async () => {
+    setIsScanning(true);
+    setScanProgress(0);
+    const detected: LANDevice[] = [];
+    
+    const baseIP = manualSubnet.endsWith('.') ? manualSubnet : `${manualSubnet}.`;
+    const targets = Array.from({ length: 254 }, (_, i) => i + 1);
+    let processed = 0;
+
+    // Scan in batches to avoid blocking
+    const batchSize = 10;
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const batch = targets.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (t) => {
+        const ip = `${baseIP}${t}`;
+        
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), isDeepScan ? 1500 : 600);
+          
+          // Probing common ports
+          const portsToProbe = isDeepScan 
+            ? [80, 443, 8080, 554, 8000]
+            : [80, 443];
+            
+          let found = false;
+          const openPorts: number[] = [];
+          
+          for (const port of portsToProbe) {
+            try {
+              // mode: 'no-cors' allows us to detect if a server is there even if it blocks us
+              await fetch(`http://${ip}:${port}`, { mode: 'no-cors', signal: controller.signal });
+              found = true;
+              openPorts.push(port);
+              if (!isDeepScan) break;
+            } catch (e: any) {
+              // If it's a TypeError but not an AbortError, the port is likely open but CORS blocked it
+              if (e.name === 'TypeError') {
+                found = true;
+                openPorts.push(port);
+                if (!isDeepScan) break;
+              }
+            }
+          }
+          
+          clearTimeout(timeoutId);
+          
+          if (found) {
+            detected.push({ 
+              ip, 
+              mac: generateSimulatedMAC(ip),
+              vendor: guessVendor(ip),
+              status: 'online', 
+              type: ip.endsWith('.1') ? 'Gateway' : (ip.includes('.100') || ip.includes('.101') ? 'IP Camera/IoT' : 'Host'),
+              lastSeen: new Date().toLocaleTimeString(),
+              ports: openPorts
+            });
+            setLanDevices([...detected]);
+          }
+        } catch (e) {
+          // Silent fail
+        } finally {
+          processed++;
+          setScanProgress(Math.round((processed / targets.length) * 100));
+        }
+      }));
+    }
+
+    setIsScanning(false);
   };
 
   const refreshWiFi = async () => {
@@ -387,91 +448,87 @@ const WiFiAnalyzer: React.FC = () => {
   // Active LAN Scanner using fetch probes
   const scanLAN = async () => {
     setIsScanning(true);
-    setLanDevices([]);
     setScanProgress(0);
+    const detected: LANDevice[] = [];
     
-          // Attempt to find real local IP first
-          const localIP = await getLocalIP();
-          const baseIP = localIP.split('.').slice(0, 3).join('.') + '.';
-          
-          const targets = isDeepScan 
-            ? Array.from({ length: 254 }, (_, i) => i + 1) 
-            : [1, 2, 5, 10, 20, 50, 100, 101, 105, 200];
-            
-          const detected: LANDevice[] = [];
-          let processed = 0;
+    // Use manual subnet if auto-detection failed or user wants to override
+    const baseIP = manualSubnet.endsWith('.') ? manualSubnet : `${manualSubnet}.`;
+    
+    // If it's a quick scan, only check common IPs
+    const targets = isDeepScan 
+      ? Array.from({ length: 254 }, (_, i) => i + 1) 
+      : [1, 2, 5, 10, 20, 50, 100, 101, 105, 200];
       
-          // Add self and gateway immediately
-          detected.push({
-            ip: baseIP + '1',
-            mac: '00:00:00:00:00:00',
-            vendor: 'Gateway (Probed)',
-            status: 'online',
-            type: 'Gateway',
-            lastSeen: new Date().toLocaleTimeString(),
-            ports: [80, 443, 53, 22]
-          });
-      
-          const batchSize = isDeepScan ? 3 : 10; // Slower batch for deep scan
-          for (let i = 0; i < targets.length; i += batchSize) {
-            const batch = targets.slice(i, i + batchSize);
-            
-            await Promise.all(batch.map(async (t) => {
-              const ip = `${baseIP}${t}`;
-              if (ip === localIP) return;
-      
-              try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), isDeepScan ? 1500 : 800); // Longer timeout for deep scan
-                
-                // Probing more ports in Deep Scan mode
-                const portsToProbe = isDeepScan 
-                  ? [21, 22, 23, 25, 53, 80, 110, 135, 139, 443, 445, 554, 1433, 1723, 3306, 3389, 5900, 8000, 8008, 8009, 8080, 8081, 8443, 8888, 9000]
-                  : [80, 443, 8080];
-                  
-                let found = false;
-                const openPorts: number[] = [];
-                
-                for (const port of portsToProbe) {
-                  try {
-                    await fetch(`http://${ip}:${port}`, { mode: 'no-cors', signal: controller.signal });
-                    found = true;
-                    openPorts.push(port);
-                    if (!isDeepScan) break; // In normal scan, stop at first found port
-                  } catch (e: any) {
-                    // If it's a TypeError but not an AbortError, it usually means the port is open but CORS blocked it
-                    if (e.name === 'TypeError') {
-                      found = true;
-                      openPorts.push(port);
-                      if (!isDeepScan) break;
-                    }
-                  }
-                }
-                
-                clearTimeout(timeoutId);
-                
-                if (found) {
-                  detected.push({ 
-                    ip, 
-                    mac: generateSimulatedMAC(ip),
-                    vendor: guessVendor(ip),
-                    status: 'online', 
-                    type: ip.includes('.100') || ip.includes('.101') ? 'IP Camera/IoT' : 'Host',
-                    lastSeen: new Date().toLocaleTimeString(),
-                    ports: isDeepScan ? openPorts : detectPorts(ip)
-                  });
-                  setLanDevices([...detected]);
-                }
-              } catch (e) {
-                // Silent fail for non-existent IPs
-              } finally {
-                processed++;
-                setScanProgress(Math.round((processed / targets.length) * 100));
-              }
-            }));
-          }
+    let processed = 0;
 
-    setLanDevices(detected);
+    // Add self and gateway immediately for better UX
+    detected.push({
+      ip: baseIP + '1',
+      mac: '00:00:00:00:00:00',
+      vendor: 'Gateway (Probed)',
+      status: 'online',
+      type: 'Gateway',
+      lastSeen: new Date().toLocaleTimeString(),
+      ports: [80, 443, 53, 22]
+    });
+
+    // Scan in batches to avoid blocking the UI thread
+    const batchSize = isDeepScan ? 5 : 15;
+    for (let i = 0; i < targets.length; i += batchSize) {
+      const batch = targets.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (t) => {
+        const ip = `${baseIP}${t}`;
+        
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), isDeepScan ? 1500 : 800);
+          
+          const portsToProbe = isDeepScan 
+            ? [80, 443, 8080, 554, 8000, 22, 21]
+            : [80, 443, 8080];
+            
+          let found = false;
+          const openPorts: number[] = [];
+          
+          for (const port of portsToProbe) {
+            try {
+              await fetch(`http://${ip}:${port}`, { mode: 'no-cors', signal: controller.signal });
+              found = true;
+              openPorts.push(port);
+              if (!isDeepScan) break;
+            } catch (e: any) {
+              if (e.name === 'TypeError') {
+                found = true;
+                openPorts.push(port);
+                if (!isDeepScan) break;
+              }
+            }
+          }
+          
+          clearTimeout(timeoutId);
+          
+          if (found) {
+            detected.push({ 
+              ip, 
+              mac: generateSimulatedMAC(ip),
+              vendor: guessVendor(ip),
+              status: 'online', 
+              type: ip.endsWith('.1') ? 'Gateway' : (ip.includes('.100') || ip.includes('.101') ? 'IP Camera/IoT' : 'Host'),
+              lastSeen: new Date().toLocaleTimeString(),
+              ports: openPorts
+            });
+            setLanDevices([...detected]);
+          }
+        } catch (e) {
+          // Silent fail
+        } finally {
+          processed++;
+          setScanProgress(Math.round((processed / targets.length) * 100));
+        }
+      }));
+    }
+
     setIsScanning(false);
   };
 
@@ -612,12 +669,6 @@ const WiFiAnalyzer: React.FC = () => {
       {/* Tabs */}
       <div className="flex border-b border-gray-700 overflow-x-auto no-scrollbar">
         <button 
-          onClick={() => setActiveTab('sniffer')}
-          className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'sniffer' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
-        >
-          Live Sniffer
-        </button>
-        <button 
           onClick={() => setActiveTab('wifi')}
           className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'wifi' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
         >
@@ -634,6 +685,12 @@ const WiFiAnalyzer: React.FC = () => {
           className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'cell' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
         >
           Cellular
+        </button>
+        <button 
+          onClick={() => setActiveTab('sniffer')}
+          className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'sniffer' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+        >
+          Live Sniffer
         </button>
       </div>
 
@@ -1142,6 +1199,32 @@ const WiFiAnalyzer: React.FC = () => {
 
       {activeTab === 'lan' && (
         <div className="space-y-6 animate-in fade-in duration-500">
+          {showManualSubnet && (
+            <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 text-blue-400">
+                <Info className="w-4 h-4" />
+                <p className="text-[10px] font-bold uppercase tracking-widest">Configuração de Rede Local</p>
+              </div>
+              <p className="text-[11px] text-gray-300 leading-relaxed">
+                Não conseguimos detectar seu IP local automaticamente. Por favor, confirme a faixa da sua rede (ex: 192.168.1) para iniciar a varredura de dispositivos.
+              </p>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={manualSubnet}
+                  onChange={(e) => setManualSubnet(e.target.value)}
+                  placeholder="Ex: 192.168.1"
+                  className="flex-1 bg-black/40 border border-gray-700 rounded-lg px-3 py-2 text-xs font-mono text-blue-400 focus:border-blue-500 outline-none"
+                />
+                <button 
+                  onClick={() => setShowManualSubnet(false)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase rounded-lg transition-all"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          )}
           {/* Topology Map Visualization */}
           <div className="p-6 bg-black/40 rounded-2xl border border-gray-700 relative overflow-hidden min-h-[300px] flex items-center justify-center">
             <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#3b82f6 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>

@@ -85,6 +85,27 @@ class NativeBridgeService {
   }
 
   /**
+   * Attempts to pair/connect with a Bluetooth device.
+   */
+  public async pairDevice(deviceId: string): Promise<boolean> {
+    if (this.isNative()) {
+      try {
+        console.log(`[NativeBridge] Native pairing requested for device: ${deviceId}`);
+        // Simulate a delay for native pairing
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return true;
+      } catch (error) {
+        console.error('[NativeBridge] Native pairing failed:', error);
+        return false;
+      }
+    } else {
+      console.log(`[NativeBridge] Web mode: Pairing simulation for ${deviceId}`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return true;
+    }
+  }
+
+  /**
    * Requests native permissions required for scanning (Location, Bluetooth, etc.)
    */
   public async requestPermissions(): Promise<boolean> {

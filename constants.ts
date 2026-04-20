@@ -8,6 +8,27 @@ export const MODES: ModeDetails[] = [
     description: 'Detecção de campos EMF (Câmeras/Microfones)',
     longDescription: `Utiliza o sensor de campo magnético (magnetômetro) do dispositivo para identificar anomalias eletromagnéticas. Dispositivos eletrônicos ocultos, como micro-câmeras e gravadores, emitem pequenas flutuações magnéticas que podem ser detectadas em curtas distâncias.`,
   },
+  {
+    id: AppView.OpticalScanner,
+    name: 'Escaneamento Óptico',
+    icon: '👁️',
+    description: 'Análise de reflexos de lentes (Glint)',
+    longDescription: `Utiliza a câmera e o flash do dispositivo para detectar reflexos característicos de lentes de câmeras ocultas. O sistema alterna o flash em frequências específicas para destacar o brilho da lente.`,
+  },
+  {
+    id: AppView.UltrasonicDetector,
+    name: 'Detector Ultrassônico',
+    icon: '🔊',
+    description: 'Captura de frequências inaudíveis',
+    longDescription: `Monitora o espectro de áudio acima de 20kHz para detectar sinais de comunicação ultrassônica usados por beacons de rastreamento ou microfones de alta tecnologia.`,
+  },
+  {
+    id: AppView.WiFiAnalyzer,
+    name: 'Analisador de Redes',
+    icon: '📶',
+    description: 'Sniffing de pacotes e análise de tráfego',
+    longDescription: `Analisa o tráfego de rede Wi-Fi local em busca de fluxos de dados suspeitos (como streaming de vídeo) vindos de dispositivos não identificados na rede.`,
+  },
 ];
 
 export const INITIAL_POWER_USER_SETTINGS: PowerUserSettings = {

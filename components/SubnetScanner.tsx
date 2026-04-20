@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Globe, Server, ShieldAlert, Info, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { getLocalIP } from '../services/webrtc-adapter';
 
 interface NetworkDevice {
   ip: string;
@@ -14,31 +15,12 @@ const SubnetScanner: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // Get Local IP via WebRTC Leak (Real Technique)
-  const getLocalIp = async () => {
-    return new Promise<string>((resolve) => {
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      pc.createDataChannel('');
-      pc.createOffer().then(pc.setLocalDescription.bind(pc));
-      pc.onicecandidate = (ice) => {
-        if (!ice || !ice.candidate || !ice.candidate.candidate) return;
-        const myIp = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(ice.candidate.candidate)?.[1];
-        if (myIp) {
-          pc.onicecandidate = null;
-          resolve(myIp);
-        }
-      };
-      // Fallback
-      setTimeout(() => resolve('192.168.1.1'), 2000);
-    });
-  };
-
   const startScan = async () => {
     setIsScanning(true);
     setDevices([]);
     setProgress(0);
 
-    const ip = await getLocalIp();
+    const ip = await getLocalIP();
     setLocalIp(ip);
 
     const subnet = ip.split('.').slice(0, 3).join('.');
