@@ -5,10 +5,16 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 const NetworkJitter: React.FC = () => {
   const [jitterData, setJitterData] = useState<{ time: string; latency: number }[]>([]);
   const [isTesting, setIsTesting] = useState(false);
-  const [avgLatency, setAvgLatency] = useState(0);
-  const [currentJitter, setCurrentJitter] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout>();
+
+  const avgLatency = jitterData.length > 0 
+    ? jitterData.reduce((acc, curr) => acc + curr.latency, 0) / jitterData.length 
+    : 0;
+
+  const currentJitter = jitterData.length > 1
+    ? Math.abs(jitterData[jitterData.length - 1].latency - jitterData[jitterData.length - 2].latency)
+    : 0;
 
   const runTest = async () => {
     const startTime = performance.now();
@@ -18,22 +24,9 @@ const NetworkJitter: React.FC = () => {
       const endTime = performance.now();
       const latency = endTime - startTime;
 
-      setJitterData(prev => {
-        const newData = [...prev.slice(-19), { time: new Date().toLocaleTimeString(), latency }];
-        
-        // Calculate average
-        const avg = newData.reduce((acc, curr) => acc + curr.latency, 0) / newData.length;
-        setAvgLatency(avg);
-
-        // Calculate jitter (variation in latency)
-        if (newData.length > 1) {
-          const lastTwo = newData.slice(-2);
-          const jitter = Math.abs(lastTwo[1].latency - lastTwo[0].latency);
-          setCurrentJitter(jitter);
-        }
-
-        return newData;
-      });
+      const newEntry = { time: new Date().toLocaleTimeString(), latency };
+      
+      setJitterData(prev => [...prev.slice(-19), newEntry]);
     } catch (err) {
       console.error('Ping error:', err);
     }

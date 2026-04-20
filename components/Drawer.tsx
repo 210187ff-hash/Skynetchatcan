@@ -17,6 +17,35 @@ interface DrawerProps {
   activeView: AppView;
 }
 
+interface NavItemProps {
+  id: AppView;
+  name: string;
+  icon: any;
+  color?: string;
+  tooltip?: string;
+  activeView: AppView;
+  onSelect: (view: AppView) => void;
+}
+
+const NavItem: React.FC<NavItemProps> = ({ id, name, icon: Icon, color, tooltip, activeView, onSelect }) => (
+  <button
+    onClick={() => onSelect(id)}
+    title={tooltip}
+    className={`group flex items-center justify-between p-3 w-full text-left rounded-xl transition-all duration-300 
+                ${activeView === id 
+                  ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]' 
+                  : 'hover:bg-gray-700/50 text-gray-400 hover:text-gray-100'}`}
+  >
+    <div className="flex items-center space-x-3">
+      <div className={`p-2 rounded-lg transition-colors ${activeView === id ? 'bg-white/20' : 'bg-gray-900 group-hover:bg-gray-800'}`}>
+        <Icon className={`w-5 h-5 ${activeView === id ? 'text-white' : (color || 'text-blue-400')}`} />
+      </div>
+      <span className="font-bold text-xs uppercase tracking-widest">{name}</span>
+    </div>
+    <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${activeView === id ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'}`} />
+  </button>
+);
+
 const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeView }) => {
   const navigationLinks = [
     { id: AppView.Dashboard, name: 'Painel de Controle', icon: LayoutDashboard, color: 'text-blue-400', tooltip: 'Visualizar resumo global do sistema e status dos sensores' },
@@ -68,25 +97,6 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
     onClose();
   };
 
-  const NavItem = ({ id, name, icon: Icon, color, tooltip }: { id: AppView, name: string, icon: any, color?: string, tooltip?: string, key?: React.Key }) => (
-    <button
-      onClick={() => handleSelect(id)}
-      title={tooltip}
-      className={`group flex items-center justify-between p-3 w-full text-left rounded-xl transition-all duration-300 
-                  ${activeView === id 
-                    ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]' 
-                    : 'hover:bg-gray-700/50 text-gray-400 hover:text-gray-100'}`}
-    >
-      <div className="flex items-center space-x-3">
-        <div className={`p-2 rounded-lg transition-colors ${activeView === id ? 'bg-white/20' : 'bg-gray-900 group-hover:bg-gray-800'}`}>
-          <Icon className={`w-5 h-5 ${activeView === id ? 'text-white' : (color || 'text-blue-400')}`} />
-        </div>
-        <span className="font-bold text-xs uppercase tracking-widest">{name}</span>
-      </div>
-      <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${activeView === id ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'}`} />
-    </button>
-  );
-
   return (
     <div
       className={`fixed inset-0 z-50 transition-all duration-500 ${isOpen ? 'visible' : 'invisible'}`}
@@ -113,7 +123,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
             <X className="w-5 h-5" />
           </button>
         </div>
-
+        
         {/* Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-8">
           {/* Navigation Section */}
@@ -121,7 +131,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
             <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] px-3">Navegação Principal</h3>
             <div className="space-y-1">
               {navigationLinks.map(link => (
-                <NavItem key={link.id} id={link.id} name={link.name} icon={link.icon} color={link.color} tooltip={link.tooltip} />
+                <NavItem key={link.id} id={link.id} name={link.name} icon={link.icon} color={link.color} tooltip={link.tooltip} activeView={activeView} onSelect={handleSelect} />
               ))}
             </div>
           </section>
@@ -156,7 +166,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
                 </button>
               ))}
               {detectionTools.map(tool => (
-                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} />
+                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} activeView={activeView} onSelect={handleSelect} />
               ))}
             </div>
           </section>
@@ -166,7 +176,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
             <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] px-3">Análise Forense</h3>
             <div className="space-y-1">
               {forensicTools.map(tool => (
-                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} />
+                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} activeView={activeView} onSelect={handleSelect} />
               ))}
             </div>
           </section>
@@ -176,7 +186,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
             <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] px-3">Integridade de Hardware</h3>
             <div className="space-y-1">
               {hardwareIntegrity.map(tool => (
-                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} />
+                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} activeView={activeView} onSelect={handleSelect} />
               ))}
             </div>
           </section>
@@ -186,7 +196,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
             <h3 className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] px-3">Auditoria de Sistema</h3>
             <div className="space-y-1">
               {systemAudit.map(tool => (
-                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} />
+                <NavItem key={tool.id} id={tool.id} name={tool.name} icon={tool.icon} tooltip={tool.tooltip} activeView={activeView} onSelect={handleSelect} />
               ))}
             </div>
           </section>

@@ -305,33 +305,31 @@ const WiFiAnalyzer: React.FC = () => {
 
   // Real Packet Interceptor (Application Level)
   useEffect(() => {
+    // Only patch if not already patched by this component type across instances
+    if ((window.fetch as any).__isSpyNetPatched) return;
+
     const originalFetch = window.fetch;
     let isPatched = false;
 
     try {
-      // Safely attempt to patch fetch
-      window.fetch = async (...args) => {
+      const patchedFetch: any = async (...args: any[]) => {
         const startTime = Date.now();
         try {
           const response = await originalFetch(...args);
           const endTime = Date.now();
           const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
           
-          // Capture headers
           const headers: Record<string, string> = {};
           response.headers.forEach((value, key) => {
             headers[key] = value;
           });
 
-          // Try to capture a snippet of the payload (clone response to avoid consuming it)
           let payload = 'Payload data encrypted or binary';
           try {
             const clonedResponse = response.clone();
             const text = await clonedResponse.text();
             payload = text.slice(0, 500) + (text.length > 500 ? '...' : '');
-          } catch (e) {
-            // Payload might be binary or not readable as text
-          }
+          } catch (e) {}
 
           const newPacket: Packet = {
             id: Date.now() + Math.random(),
@@ -351,9 +349,12 @@ const WiFiAnalyzer: React.FC = () => {
           throw error;
         }
       };
+
+      patchedFetch.__isSpyNetPatched = true;
+      window.fetch = patchedFetch;
       isPatched = true;
     } catch (error) {
-      console.warn('Network Sniffer: window.fetch is read-only in this environment. Live packet capture disabled.', error);
+      console.warn('Network Sniffer: window.fetch is read-only in this environment.', error);
     }
 
     return () => {
