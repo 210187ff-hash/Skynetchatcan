@@ -105,7 +105,7 @@ const ModeDisplay: React.FC<ModeDisplayProps> = ({ activeModeId, powerUserSettin
           if (next % 20 === 0 && Math.random() > 0.5) {
             setLiveMarkers(prevMarkers => [
               ...prevMarkers, 
-              { x: Math.random() * 80 + 10, y: Math.random() * 80 + 10, id: Date.now() }
+              { x: Math.random() * 80 + 10, y: Math.random() * 80 + 10, id: Date.now() + Math.random() }
             ].slice(-3));
           }
           return next;

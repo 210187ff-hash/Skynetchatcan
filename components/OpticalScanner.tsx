@@ -74,7 +74,7 @@ const OpticalScanner: React.FC = () => {
           
           // Simple clustering: if too close to existing detection, skip
           if (!newDetections.some(d => Math.abs(d.x - x) < 20 && Math.abs(d.y - y) < 20)) {
-            newDetections.push({ x, y, size: 30, id: Date.now() + i });
+            newDetections.push({ x, y, size: 30, id: Date.now() + Math.random() + i });
           }
         }
 
