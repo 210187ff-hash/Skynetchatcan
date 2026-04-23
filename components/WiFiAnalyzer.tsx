@@ -238,24 +238,27 @@ const WiFiAnalyzer: React.FC = () => {
 
   const refreshWiFi = async () => {
     // Check native bridge first
-    const nativeNetworks = await nativeBridge.scanWifi();
-    if (nativeNetworks.length > 0) {
-      const mapped: WiFiNetwork[] = nativeNetworks.map(n => ({
-        ssid: n.ssid,
-        signal: Math.abs(n.level),
-        security: n.capabilities,
-        channel: Math.floor(Math.random() * 11) + 1,
-        frequency: n.frequency > 3000 ? '5 GHz' : '2.4 GHz',
-        history: [{ time: new Date().toLocaleTimeString(), signal: n.level }]
-      }));
-      setNetworks(mapped);
-      return;
+    if (nativeBridge.isNative()) {
+      setIsScanning(true);
+      const nativeNetworks = await nativeBridge.scanWifi();
+      if (nativeNetworks.length > 0) {
+        const mapped: WiFiNetwork[] = nativeNetworks.map(n => ({
+          ssid: n.ssid,
+          signal: Math.abs(n.level),
+          security: n.capabilities || 'WPA2/WPA3',
+          channel: Math.floor(Math.random() * 11) + 1,
+          frequency: n.frequency > 3000 ? '5 GHz' : '2.4 GHz',
+          history: [{ time: new Date().toLocaleTimeString(), signal: -Math.abs(n.level) }]
+        }));
+        setNetworks(mapped);
+        setIsScanning(false);
+        return;
+      }
+      setIsScanning(false);
     }
 
-    // Browsers cannot scan for nearby Wi-Fi networks for privacy reasons.
-    // We only show the current connection info and simulate nearby ones for the UI.
+    // Fallback to simulation/standard web info
     const conn = (navigator as any).connection;
-    
     const current: WiFiNetwork = {
       ssid: connectedSSID,
       signal: conn ? Math.max(30, Math.min(95, 100 - (conn.downlink * 10))) : 75,
@@ -281,23 +284,7 @@ const WiFiAnalyzer: React.FC = () => {
         channel: 11, 
         frequency: '2.4 GHz', 
         history: Array.from({ length: 20 }, (_, i) => ({ time: `${i}s`, signal: -(75 + Math.random() * 15) }))
-      },
-      { 
-        ssid: 'Hidden_Network', 
-        signal: 90, 
-        security: 'WPA2/WPA3', 
-        channel: 36, 
-        frequency: '5.0 GHz', 
-        history: Array.from({ length: 20 }, (_, i) => ({ time: `${i}s`, signal: -(85 + Math.random() * 10) }))
-      },
-      { 
-        ssid: 'TP-Link_Guest', 
-        signal: 35, 
-        security: 'Open', 
-        channel: 149, 
-        frequency: '5.0 GHz', 
-        history: Array.from({ length: 20 }, (_, i) => ({ time: `${i}s`, signal: -(30 + Math.random() * 10) }))
-      },
+      }
     ];
 
     setNetworks([current, ...simulated]);

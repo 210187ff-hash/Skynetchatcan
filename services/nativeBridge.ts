@@ -1,10 +1,14 @@
 import { Capacitor } from '@capacitor/core';
+import { Camera, CameraResultType } from '@capacitor/camera';
+import { Geolocation } from '@capacitor/geolocation';
+import { Device } from '@capacitor/device';
+import { BleClient, NumberToUUID } from '@capacitor-community/bluetooth-le';
+import { CapacitorWifi } from '@capgo/capacitor-wifi';
 
 /**
  * NativeBridge Service
  * This service acts as a bridge between the React web application and native Android/iOS capabilities.
- * It detects the platform and provides methods to access hardware features via Capacitor plugins,
- * falling back to simulations when running in a web browser.
+ * It uses Capacitor plugins to access real hardware features when running as a native app.
  */
 
 export enum Platform {
@@ -29,6 +33,7 @@ export interface BluetoothDevice {
 
 class NativeBridgeService {
   private platform: Platform;
+  private isBluetoothInitialized: boolean = false;
 
   constructor() {
     this.platform = Capacitor.getPlatform() as Platform;
@@ -44,37 +49,58 @@ class NativeBridgeService {
   }
 
   /**
-   * Scans for nearby Wi-Fi networks.
-   * In Native mode, this would call a Capacitor plugin like 'capacitor-wifi-scanner'.
-   * In Web mode, it returns simulated data.
+   * Scans for nearby Wi-Fi networks using @capgo/capacitor-wifi.
    */
   public async scanWifi(): Promise<WiFiNetwork[]> {
     if (this.isNative()) {
       try {
-        // This is where you would call the actual native plugin
-        // Example: const result = await Capacitor.Plugins.WifiScanner.scan();
-        // return result.networks;
-        console.log('[NativeBridge] Native Wi-Fi scan requested. Plugin call would go here.');
-        return []; // Placeholder for real plugin implementation
+        const result = await CapacitorWifi.scan();
+        return result.networks.map(n => ({
+          ssid: n.SSID || 'Unknown',
+          bssid: n.BSSID || '',
+          level: n.level || 0,
+          frequency: n.frequency || 0,
+          capabilities: n.capabilities || ''
+        }));
       } catch (error) {
         console.error('[NativeBridge] Native Wi-Fi scan failed:', error);
         return [];
       }
     } else {
-      console.log('[NativeBridge] Web mode: Returning simulated Wi-Fi data.');
-      return []; // Components will handle their own simulations for now
+      return []; 
     }
   }
 
   /**
-   * Scans for nearby Bluetooth devices.
-   * In Native mode, this would call 'capacitor-bluetooth-le'.
+   * Scans for nearby Bluetooth devices using @capacitor-community/bluetooth-le.
    */
   public async scanBluetooth(): Promise<BluetoothDevice[]> {
     if (this.isNative()) {
       try {
-        console.log('[NativeBridge] Native Bluetooth scan requested.');
-        return [];
+        if (!this.isBluetoothInitialized) {
+          await BleClient.initialize();
+          this.isBluetoothInitialized = true;
+        }
+
+        const devices: BluetoothDevice[] = [];
+        await BleClient.requestLEScan(
+          {},
+          (result) => {
+            if (result.device.name) {
+              devices.push({
+                name: result.device.name,
+                id: result.device.deviceId,
+                rssi: result.rssi
+              });
+            }
+          }
+        );
+
+        // Scan for 5 seconds
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        await BleClient.stopLEScan();
+        
+        return devices;
       } catch (error) {
         console.error('[NativeBridge] Native Bluetooth scan failed:', error);
         return [];
@@ -85,35 +111,60 @@ class NativeBridgeService {
   }
 
   /**
-   * Attempts to pair/connect with a Bluetooth device.
+   * Captures a photo using @capacitor/camera.
    */
-  public async pairDevice(deviceId: string): Promise<boolean> {
+  public async capturePhoto(): Promise<string | null> {
     if (this.isNative()) {
       try {
-        console.log(`[NativeBridge] Native pairing requested for device: ${deviceId}`);
-        // Simulate a delay for native pairing
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return true;
+        const image = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.DataUrl
+        });
+        return image.dataUrl || null;
       } catch (error) {
-        console.error('[NativeBridge] Native pairing failed:', error);
-        return false;
+        console.error('[NativeBridge] Camera capture failed:', error);
+        return null;
       }
-    } else {
-      console.log(`[NativeBridge] Web mode: Pairing simulation for ${deviceId}`);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      return true;
     }
+    return null;
   }
 
   /**
-   * Requests native permissions required for scanning (Location, Bluetooth, etc.)
+   * Gets device information.
+   */
+  public async getDeviceInfo() {
+    return await Device.getInfo();
+  }
+
+  /**
+   * Gets current location.
+   */
+  public async getCurrentPosition() {
+    return await Geolocation.getCurrentPosition();
+  }
+
+  /**
+   * Requests native permissions required for scanning and hardware access.
    */
   public async requestPermissions(): Promise<boolean> {
     if (this.isNative()) {
       try {
         console.log('[NativeBridge] Requesting native permissions...');
-        // Example: await Capacitor.Plugins.Permissions.request('location');
-        return true;
+        
+        // Request Camera
+        const cameraRes = await Camera.requestPermissions();
+        
+        // Request Geolocation (needed for WiFi/BT scanning on Android)
+        const geoRes = await Geolocation.requestPermissions();
+        
+        // Bluetooth permissions are often bundled or handled via initialize()
+        if (this.platform === Platform.Android) {
+          // On Android, we need fine location for scanning
+          console.log('[NativeBridge] Android specific: Location permission granted?', geoRes.location);
+        }
+
+        return cameraRes.camera === 'granted' && geoRes.location === 'granted';
       } catch (error) {
         console.error('[NativeBridge] Permission request failed:', error);
         return false;

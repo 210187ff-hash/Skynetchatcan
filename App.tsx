@@ -59,6 +59,21 @@ const App: React.FC = () => {
     setHistory((prev) => [result, ...prev]);
   }, []);
 
+  useEffect(() => {
+    // Request permissions on startup if in Native mode
+    const initNative = async () => {
+      if (nativeBridge.isNative()) {
+        try {
+          await nativeBridge.requestPermissions();
+          console.log('[App] Native permissions requested.');
+        } catch (error) {
+          console.error('[App] Failed to request native permissions:', error);
+        }
+      }
+    };
+    initNative();
+  }, []);
+
   const renderContent = () => {
     switch (activeView) {
       case AppView.Dashboard:

@@ -17,6 +17,30 @@ const BluetoothSniffer: React.FC = () => {
   const requestBluetoothDevice = async () => {
     setIsScanning(true);
     setError(null);
+
+    // Try native background scan first if in native app
+    if (nativeBridge.isNative()) {
+      try {
+        const nativeDevices = await nativeBridge.scanBluetooth();
+        if (nativeDevices.length > 0) {
+          const mapped = nativeDevices.map(d => ({
+            name: d.name || 'Unknown Device',
+            id: d.id,
+            connected: false
+          }));
+          setDevices(prev => {
+            const ids = new Set(prev.map(p => p.id));
+            const newOnes = mapped.filter(m => !ids.has(m.id));
+            return [...newOnes, ...prev];
+          });
+          setIsScanning(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("Native BT scan failed, falling back to picker:", err);
+      }
+    }
+
     try {
       // Real Web Bluetooth API call
       // Note: This opens a native browser dialog for the user to pick a device

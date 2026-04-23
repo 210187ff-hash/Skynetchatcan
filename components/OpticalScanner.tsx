@@ -13,6 +13,11 @@ const OpticalScanner: React.FC = () => {
   const animationRef = useRef<number | null>(null);
 
   const startCamera = async () => {
+    // Request permissions via bridge to ensure native layer is ready
+    if (nativeBridge.isNative()) {
+      await nativeBridge.requestPermissions();
+    }
+
     try {
       let stream: MediaStream;
       try {
