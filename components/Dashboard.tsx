@@ -39,6 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectView }) => {
     { id: AppView.StoragePressure, name: 'Storage', icon: '🗄️', color: 'bg-blue-600' },
     { id: AppView.FontFingerprint, name: 'Font Finger', icon: '🔤', color: 'bg-purple-600' },
     { id: AppView.CanvasNoiseTest, name: 'Canvas Noise', icon: '🎨', color: 'bg-pink-600' },
+    { id: AppView.AndroidControlCenter, name: 'Android Control', icon: '📲', color: 'bg-cyan-700' },
     { id: AppView.PowerUserSettings, name: 'Configurações', icon: '⚙️', color: 'bg-gray-600' },
   ];
 

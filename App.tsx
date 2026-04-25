@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import Drawer from './components/Drawer';
 import Introduction from './components/Introduction';
@@ -33,8 +33,10 @@ import ScreenIntegrity from './components/ScreenIntegrity';
 import StoragePressure from './components/StoragePressure';
 import FontFingerprint from './components/FontFingerprint';
 import CanvasNoiseTest from './components/CanvasNoiseTest';
+import AndroidControlCenter from './components/AndroidControlCenter';
 import { AppView, PowerUserSettings as PowerUserSettingsType, DetectionResult } from './types';
 import { INITIAL_POWER_USER_SETTINGS } from './constants';
+import { nativeBridge } from './services/nativeBridge';
 
 const App: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
@@ -138,6 +140,8 @@ const App: React.FC = () => {
         return <FontFingerprint />;
       case AppView.CanvasNoiseTest:
         return <CanvasNoiseTest />;
+      case AppView.AndroidControlCenter:
+        return <AndroidControlCenter />;
       case AppView.BlueScan:
         return (
           <ModeDisplay 
