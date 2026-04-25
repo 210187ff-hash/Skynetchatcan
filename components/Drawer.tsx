@@ -6,7 +6,7 @@ import {
   Cpu, Volume2, Map, Shield, Eye, ShieldAlert, FolderSearch, 
   Mic2, Eraser, Globe, Zap, Usb, Battery, Globe2, Waves, 
   Lightbulb, Network, ClipboardCheck, Keyboard, GlobeLock, 
-  Monitor, HardDrive, Type, Palette, LayoutDashboard,
+  Monitor, HardDrive, Type, Palette, LayoutDashboard, RadioTower,
   ChevronRight, X
 } from 'lucide-react';
 
@@ -82,6 +82,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, onSelectView, activeVi
   ];
 
   const systemAudit = [
+    { id: AppView.AndroidControlCenter, name: 'Android Control', icon: RadioTower, tooltip: 'Controle seguro de Wi-Fi, Bluetooth e NFC com auditoria local' },
     { id: AppView.NetworkJitter, name: 'Network Jitter', icon: Network, tooltip: 'Analisar estabilidade e jitter da conexão de rede' },
     { id: AppView.ClipboardSanitizer, name: 'Clipboard Sanitizer', icon: ClipboardCheck, tooltip: 'Limpar dados sensíveis da área de transferência' },
     { id: AppView.KeystrokeDynamics, name: 'Keystroke Dynamics', icon: Keyboard, tooltip: 'Auditoria de padrões de digitação e biometria' },

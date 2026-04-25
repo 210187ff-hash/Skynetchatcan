@@ -31,6 +31,7 @@ export enum AppView {
   StoragePressure = 'StoragePressure',
   FontFingerprint = 'FontFingerprint',
   CanvasNoiseTest = 'CanvasNoiseTest',
+  AndroidControlCenter = 'AndroidControlCenter',
 }
 
 export interface ModeDetails {
